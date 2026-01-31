@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenRouter AI Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: rgba(156,163,175,0.4); border-radius: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        .message-enter { animation: messageSlideIn 0.3s ease-out; }
+        @keyframes messageSlideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .typing-indicator span { animation: typingBounce 1.4s infinite ease-in-out; }
+        @keyframes typingBounce { 0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; } 40% { transform: scale(1); opacity: 1; } }
+        .glow-blue { box-shadow: 0 0 20px rgba(0, 123, 255, 0.3); }
+        .gradient-text { background: linear-gradient(135deg, #007BFF 0%, #00D4FF 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+        
+        const Icons = {
+            Plus: () => (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+            ),
+            MessageSquare: () => (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+            ),
+            Send: () => (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="22" y1="2" x2="11" y2="13"/>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+            ),
+            Paperclip: () => (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                </svg>
+            ),
+            Menu: () => (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+            ),
+            X: () => (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            ),
+            Settings: () => (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+            ),
+            User: () => (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+            ),
+            Moon: () => (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+            ),
+            Sun: () => (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="5"/>
+                    <line x1="12" y1="1" x2="12" y2="3"/>
+                    <line x1="12" y1="21" x2="12" y2="23"/>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                    <line x1="1" y1="12" x2="3" y2="12"/>
+                    <line x1="21" y1="12" x2="23" y2="12"/>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                </svg>
+            ),
+            MoreHorizontal: () => (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="1"/>
+                    <circle cx="19" cy="12" r="1"/>
+                    <circle cx="5" cy="12" r="1"/>
+                </svg>
+            ),
+            FileText: () => (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                </svg>
+            ),
+            XCircle: () => (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="15" y1="9" x2="9" y2="15"/>
+                    <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+            ),
+            Download: () => (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+            ),
+            Bot: ({ size = 40, className = "" }) => (
+                <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+                    <defs>
+                        <linearGradient id="botGrad" x1="4" y1="6" x2="44" y2="42">
+                            <stop stopColor="#007BFF"/>
+                            <stop offset="1" stopColor="#0056b3"/>
+                        </linearGradient>
+                    </defs>
+                    <rect x="8" y="8" width="32" height="36" rx="8" fill="url(#botGrad)"/>
+                    <circle cx="16" cy="20" r="3" fill="white"/>
+                    <circle cx="32" cy="20" r="3" fill="white"/>
+                    <rect x="14" y="30" width="20" height="4" rx="2" fill="white"/>
+                    <rect x="18" y="36" width="12" height="4" rx="1" fill="white" opacity="0.7"/>
+                </svg>
+            )
+        };
+        
+        function AIChat() {
+            const [darkMode, setDarkMode] = useState(true);
+            const [sidebarOpen, setSidebarOpen] = useState(true);
+            const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+            const [input, setInput] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+            const [attachments, setAttachments] = useState([]);
+            const [showWelcome, setShowWelcome] = useState(true);
+            const [chatHistory, setChatHistory] = useState([]);
+            
+            const messagesEndRef = useRef(null);
+            const textareaRef = useRef(null);
+            const fileInputRef = useRef(null);
+            
+            // Загружаем историю из localStorage
+            useEffect(function() {
+                const saved = localStorage.getItem('chat_history');
+                if (saved) {
+                    try {
+                        setChatHistory(JSON.parse(saved));
+                    } catch (e) {}
+                }
+            }, []);
+            
+            // Сохраняем чат в историю
+            function saveChatToHistory(title) {
+                const newChat = {
+                    id: Date.now(),
+                    title: title || input.substring(0, 30) || 'Новый чат',
+                    date: 'Сегодня'
+                };
+                const updated = [newChat, ...chatHistory];
+                setChatHistory(updated);
+                localStorage.setItem('chat_history', JSON.stringify(updated));
+            }
+            
+            const demoMessages = [
+                {
+                    id: 1,
+                    role: 'assistant',
+                    content: 'Привет! Я AI ассистент на базе OpenRouter (модель Arcee AI).\n\nЧем я могу помочь вам сегодня?',
+                    timestamp: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+                }
+            ];
+            
+            const [messages, setMessages] = useState(demoMessages);
+            
+            const theme = {
+                bg: darkMode ? 'bg-[#0a0e17]' : 'bg-[#f8f9fa]',
+                bgSidebar: darkMode ? 'bg-[#0d1119]' : 'bg-[#ffffff]',
+                bgHover: darkMode ? 'hover:bg-[#1a2332]' : 'hover:bg-[#f1f3f4]',
+                text: darkMode ? 'text-[#e8eaed]' : 'text-[#1a1a1a]',
+                textSecondary: darkMode ? 'text-[#9aa0a6]' : 'text-[#5f6368]',
+                textMuted: darkMode ? 'text-[#6b7280]' : 'text-[#9aa0a6]',
+                border: darkMode ? 'border-[#2d3748]' : 'border-[#e8e8e8]',
+                userBubble: darkMode ? 'bg-[#238636]' : 'bg-[#1a1a1a]',
+                inputBg: darkMode ? 'bg-[#171e2e]' : 'bg-[#ffffff]',
+            };
+            
+            useEffect(function() {
+                if (messagesEndRef.current) {
+                    messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+                }
+            }, [messages, showWelcome]);
+            
+            useEffect(function() {
+                if (textareaRef.current) {
+                    textareaRef.current.style.height = 'auto';
+                    textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px';
+                }
+            }, [input]);
+            
+            function handleSend() {
+                if (!input.trim() && attachments.length === 0) return;
+                
+                // Формируем сообщение с содержимым Excel файлов
+                let messageContent = input;
+                const excelFiles = attachments.filter(a => a.type === 'excel');
+                
+                if (excelFiles.length > 0) {
+                    messageContent += '\n\n=== ВЛОЖЕННЫЕ ФАЙЛЫ ===\n';
+                    excelFiles.forEach(function(file) {
+                        messageContent += file.content + '\n';
+                    });
+                }
+                
+                const userMsg = {
+                    id: Date.now(),
+                    role: 'user',
+                    content: messageContent,
+                    timestamp: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+                };
+                
+                setMessages(function(prev) { return [...prev, userMsg]; });
+                setInput('');
+                setAttachments([]);
+                setShowWelcome(false);
+                setIsLoading(true);
+                
+                // Реальный вызов OpenRouter API
+                fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer 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',
+                        'HTTP-Referer': window.location.origin,
+                        'X-Title': 'AI Chat'
+                    },
+                    body: JSON.stringify({
+                        model: 'arcee-ai/trinity-large-preview:free',
+                        messages: messages.filter(m => m.role).concat([{ role: 'user', content: messageContent }]).map(m => ({ role: m.role, content: m.content })),
+                        stream: true
+                    })
+                }).then(function(response) {
+                    if (!response.ok) {
+                        throw new Error('Ошибка API: ' + response.status);
+                    }
+                    return response.body.getReader();
+                }).then(function(reader) {
+                    const decoder = new TextDecoder();
+                    let assistantContent = '';
+                    
+                    const aiMessage = {
+                        id: Date.now() + 1,
+                        role: 'assistant',
+                        content: '',
+                        timestamp: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+                    };
+                    setMessages(function(prev) { return [...prev, aiMessage]; });
+                    
+                    function read() {
+                        reader.read().then(function(result) {
+                            if (result.done) return;
+                            
+                            const chunk = decoder.decode(result.value);
+                            const lines = chunk.split('\n');
+                            
+                            for (var i = 0; i < lines.length; i++) {
+                                var line = lines[i];
+                                if (line.startsWith('data: ')) {
+                                    var data = line.slice(6);
+                                    if (data !== '[DONE]') {
+                                        try {
+                                            var parsed = JSON.parse(data);
+                                            var content = parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content;
+                                            if (content) {
+                                                assistantContent += content;
+                                                setMessages(function(prev) {
+                                                    var updated = prev.slice();
+                                                    updated[updated.length - 1] = {
+                                                        id: updated[updated.length - 1].id,
+                                                        role: 'assistant',
+                                                        content: assistantContent,
+                                                        timestamp: updated[updated.length - 1].timestamp
+                                                    };
+                                                    return updated;
+                                                });
+                                            }
+                                        } catch (e) {}
+                                    }
+                                }
+                            }
+                            read();
+                        });
+                    }
+                    read();
+                }).catch(function(err) {
+                    setMessages(function(prev) { return [...prev, {
+                        id: Date.now() + 1,
+                        role: 'assistant',
+                        content: 'Ошибка: ' + err.message,
+                        timestamp: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+                    }]; });
+                }).finally(function() {
+                    setIsLoading(false);
+                    // Сохраняем в историю после первого сообщения
+                    if (messages.length === 1) {
+                        saveChatToHistory();
+                    }
+                });
+            }
+            
+            function handleFileUpload(e) {
+                const files = Array.from(e.target.files || []);
+                if (files.length === 0) {
+                    console.log('Файлы не выбраны');
+                    return;
+                }
+                
+                files.forEach(function(file) {
+                    console.log('Загрузка файла:', file.name);
+                    const isExcel = file.name.match(/\.(xlsx|xls|csv)$/i);
+                    
+                    if (isExcel) {
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            try {
+                                console.log('Файл загружен, парсинг...');
+                                const data = new Uint8Array(event.target.result);
+                                
+                                // Проверяем, загружена ли библиотека XLSX
+                                if (typeof XLSX === 'undefined') {
+                                    throw new Error('Библиотека XLSX не загружена');
+                                }
+                                
+                                const workbook = XLSX.read(data, { type: 'array' });
+                                
+                                let excelContent = `Файл: ${file.name}\n\n`;
+                                workbook.SheetNames.forEach(function(sheetName) {
+                                    const sheet = workbook.Sheets[sheetName];
+                                    excelContent += `Лист: ${sheetName}\n`;
+                                    excelContent += XLSX.utils.sheet_to_csv(sheet) + '\n\n';
+                                });
+                                
+                                console.log('Файл успешно обработан');
+                                setAttachments(function(prev) { return [...prev, {
+                                    id: Date.now() + Math.random(),
+                                    name: file.name,
+                                    size: (file.size / 1024).toFixed(1) + ' KB',
+                                    type: 'excel',
+                                    content: excelContent
+                                }]; });
+                            } catch (err) {
+                                console.error('Ошибка парсинга Excel:', err);
+                                setAttachments(function(prev) { return [...prev, {
+                                    id: Date.now() + Math.random(),
+                                    name: file.name,
+                                    size: (file.size / 1024).toFixed(1) + ' KB',
+                                    type: 'error'
+                                }]; });
+                            }
+                        };
+                        reader.onerror = function() {
+                            console.error('Ошибка чтения файла');
+                        };
+                        reader.readAsArrayBuffer(file);
+                    } else {
+                        setAttachments(function(prev) { return [...prev, {
+                            id: Date.now() + Math.random(),
+                            name: file.name,
+                            size: (file.size / 1024).toFixed(1) + ' KB'
+                        }]; });
+                    }
+                });
+            }
+            
+            function removeAttachment(id) {
+                setAttachments(function(prev) { return prev.filter(function(a) { return a.id !== id; }); });
+            }
+            
+            // Скачиваем загруженный Excel файл
+            function downloadExcelAttachment(attachment) {
+                if (attachment.type === 'excel' && attachment.content) {
+                    const lines = attachment.content.split('\n');
+                    const data = [];
+                    
+                    for (let line of lines) {
+                        if (line.startsWith('|') && line.includes('|')) {
+                            const cells = line.split('|').map(c => c.trim()).filter(c => c);
+                            if (cells.length > 0) {
+                                data.push(cells);
+                            }
+                        }
+                    }
+                    
+                    if (data.length > 0) {
+                        const ws = XLSX.utils.aoa_to_sheet(data);
+                        const wb = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(wb, ws, 'Данные');
+                        XLSX.writeFile(wb, attachment.name);
+                    } else {
+                        alert('Не удалось извлечь данные из файла');
+                    }
+                } else {
+                    alert('Этот файл нельзя скачать');
+                }
+            }
+            
+            // Проверяем, есть ли табличные данные в сообщении
+            function hasTableData(content) {
+                const lines = content.split('\n');
+                let hasHeaderRow = false;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    // Ищем строку с |---|---|
+                    if (line.match(/^\|[-:\s]+\|$/)) {
+                        // Проверяем есть ли перед ней строка с контентом
+                        if (i > 0 && lines[i-1].trim().startsWith('|') && lines[i-1].trim().endsWith('|')) {
+                            return true;
+                        }
+                    }
+                }
+                
+                // Python DataFrame
+                const dfRegex = /df\s*=\s*pd\.DataFrame\(/;
+                if (dfRegex.test(content)) return true;
+                
+                return false;
+            }
+            
+            // Создаём Excel из данных AI
+            function createExcelFromAI(messageId) {
+                // Проверяем загрузку библиотеки
+                if (typeof XLSX === 'undefined') {
+                    alert('Ошибка: библиотека XLSX не загружена. Обновите страницу.');
+                    return;
+                }
+                
+                const message = messages.find(m => m.id === messageId);
+                if (!message) {
+                    console.error('Сообщение не найдено');
+                    return;
+                }
+                
+                const content = message.content;
+                
+                // Ищем markdown таблицу
+                const tableLines = [];
+                const lines = content.split('\n');
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    // Ищем строки с |data| |data| 
+                    if (line.startsWith('|') && line.endsWith('|')) {
+                        // Пропускаем строку-разделитель |---|---
+                        if (!line.match(/^\|[-:\s]+\|$/)) {
+                            tableLines.push(line);
+                        }
+                    }
+                }
+                
+                console.log('Найдено строк таблицы:', tableLines.length);
+                
+                if (tableLines.length >= 2) {
+                    const rows = tableLines.map(line => {
+                        const cells = line.substring(1, line.length - 1).split('|').map(c => c.trim());
+                        return cells;
+                    });
+                    
+                    console.log('Создаём Excel из', rows.length, 'строк');
+                    
+                    const ws = XLSX.utils.aoa_to_sheet(rows);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Данные');
+                    XLSX.writeFile(wb, 'таблица_' + Date.now() + '.xlsx');
+                    return;
+                }
+                
+                // Пробуем Python DataFrame
+                const dfRegex = /df\s*=\s*pd\.DataFrame\(\{\s*['"](.+?)['"]:\s*\[(.*?)\]/s;
+                const dfMatch = content.match(dfRegex);
+                
+                if (dfMatch) {
+                    const colName = dfMatch[1];
+                    const values = dfMatch[2].split(',').map(v => v.trim().replace(/['"]/g, ''));
+                    const ws = XLSX.utils.aoa_to_sheet([[colName], ...values.map(v => [v])]);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Данные');
+                    XLSX.writeFile(wb, 'таблица_' + Date.now() + '.xlsx');
+                    return;
+                }
+                
+                alert('Таблица не найдена. Попросите AI создать таблицу в формате:\n| Заголовок |\n| --- |\n| Значение 1 |\n| Значение 2 |');
+            }
+            
+            function handleKeyPress(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                }
+            }
+            
+            function handleNewChat() {
+                setMessages(demoMessages);
+                setShowWelcome(true);
+                setInput('');
+                setAttachments([]);
+            }
+            
+            function loadChat(chat) {
+                setInput('');
+                setShowWelcome(false);
+                setMessages([
+                    {
+                        id: 1,
+                        role: 'assistant',
+                        content: 'Продолжаем разговор...',
+                        timestamp: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+                    }
+                ]);
+            }
+            
+            const welcomeSuggestions = [
+                { icon: '💻', text: 'Помоги с написанием кода', desc: 'Python, JavaScript, React' },
+                { icon: '📚', text: 'Объясни концепцию', desc: 'Алгоритмы, паттерны' },
+                { icon: '✍️', text: 'Создай текст', desc: 'Статьи, документация' },
+                { icon: '📊', text: 'Анализ данных', desc: 'Excel, статистика' }
+            ];
+            
+            return React.createElement('div', { 
+                className: 'h-screen flex ' + theme.bg + ' ' + theme.text + ' transition-colors duration-300 font-sans overflow-hidden'
+            },
+                // Sidebar
+                React.createElement('aside', { 
+                    className: 'fixed md:relative ' + (sidebarOpen ? 'w-[280px]' : 'w-0 md:w-[70px]') + ' ' + (mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0') + ' ' + theme.bgSidebar + ' border-r ' + theme.border + ' flex flex-col transition-all duration-300 z-50 md:z-auto overflow-hidden'
+                },
+                    mobileMenuOpen && React.createElement('div', { 
+                        className: 'fixed inset-0 bg-black/60 backdrop-blur-sm md:hidden', 
+                        onClick: function() { setMobileMenuOpen(false); } 
+                    }),
+                    React.createElement('div', { className: 'flex flex-col h-full w-full' },
+                        React.createElement('div', { className: 'p-4' },
+                            React.createElement('button', { 
+                                onClick: handleNewChat,
+                                className: 'w-full flex items-center gap-3 px-4 py-3.5 ' + (darkMode ? 'bg-[#1e3a5f] hover:bg-[#254a7a]' : 'bg-[#007BFF] hover:bg-[#0056b3]') + ' rounded-xl transition-all duration-200 shadow-lg'
+                            },
+                                React.createElement('div', { className: 'p-1 bg-white/20 rounded-lg' },
+                                    React.createElement(Icons.Plus)
+                                ),
+                                sidebarOpen && React.createElement('span', { className: 'text-white font-medium text-sm' }, 'Новый чат')
+                            )
+                        ),
+                        React.createElement('div', { className: 'flex-1 overflow-y-auto px-3 py-2' },
+                            sidebarOpen && React.createElement('div', null,
+                                chatHistory.length > 0 ? React.createElement('div', null,
+                                    React.createElement('div', { className: 'text-xs font-semibold uppercase tracking-wider mb-3 px-3 ' + theme.textMuted }, 'История'),
+                                    chatHistory.map(function(chat) {
+                                        return React.createElement('button', { 
+                                            key: chat.id, 
+                                            onClick: function() { loadChat(chat); },
+                                            className: 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm mb-1 ' + theme.bgHover + ' transition-all duration-150 group'
+                                        },
+                                            React.createElement('div', { className: 'p-1.5 rounded-lg bg-gradient-to-br from-[#007BFF]/10 to-[#00D4FF]/10 group-hover:from-[#007BFF]/20 group-hover:to-[#00D4FF]/20 transition-all' },
+                                                React.createElement(Icons.MessageSquare)
+                                            ),
+                                            React.createElement('span', { className: 'truncate flex-1 ' + theme.textSecondary }, chat.title)
+                                        );
+                                    })
+                                ) : React.createElement('div', { className: 'text-center py-8 ' + theme.textMuted },
+                                    React.createElement('p', { className: 'text-sm' }, 'История пуста'),
+                                    React.createElement('p', { className: 'text-xs mt-1' }, 'Чаты будут сохраняться здесь')
+                                )
+                            )
+                        ),
+                        React.createElement('div', { className: 'p-4 border-t ' + theme.border },
+                            React.createElement('div', { 
+                                className: 'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl ' + theme.bgHover + ' transition-all cursor-pointer',
+                                onClick: function() { setDarkMode(!darkMode); }
+                            },
+                                React.createElement('div', { className: 'w-10 h-10 rounded-full bg-gradient-to-br from-[#007BFF] to-[#0056b3] flex items-center justify-center text-white shadow-lg' },
+                                    React.createElement(Icons.User)
+                                ),
+                                sidebarOpen && React.createElement('div', { className: 'flex-1 text-left' },
+                                    React.createElement('div', { className: 'text-sm font-semibold ' + theme.text }, 'Пользователь'),
+                                    React.createElement('div', { className: 'text-xs ' + theme.textMuted }, 'OpenRouter AI')
+                                ),
+                                sidebarOpen && React.createElement('div', { 
+                                    className: 'p-2 rounded-lg ' + (darkMode ? 'bg-[#1a2332]' : 'bg-[#f1f3f4]') + ' transition-all',
+                                    title: darkMode ? 'Светлая тема' : 'Тёмная тема'
+                                },
+                                    darkMode ? React.createElement(Icons.Sun) : React.createElement(Icons.Moon)
+                                )
+                            )
+                        )
+                    )
+                ),
+                
+                // Main Content
+                React.createElement('main', { className: 'flex-1 flex flex-col min-w-0 relative' },
+                    React.createElement('div', { 
+                        className: 'absolute top-0 left-0 right-0 h-32 bg-gradient-to-b ' + (darkMode ? 'from-[#0d1119]/100 to-transparent' : 'from-[#ffffff]/100 to-transparent') + ' pointer-events-none z-10'
+                    }),
+                    
+                    React.createElement('header', { 
+                        className: 'flex items-center justify-between px-4 py-3 border-b ' + theme.border + ' ' + theme.bgSidebar + ' relative z-20'
+                    },
+                        React.createElement('div', { className: 'flex items-center gap-3' },
+                            React.createElement('button', { 
+                                onClick: function() { setMobileMenuOpen(true); }, 
+                                className: 'md:hidden p-2 rounded-lg ' + theme.bgHover + ' transition-all'
+                            },
+                                React.createElement(Icons.Menu)
+                            ),
+                            React.createElement('button', { 
+                                onClick: function() { setSidebarOpen(!sidebarOpen); }, 
+                                className: 'hidden md:flex p-2 rounded-lg ' + theme.bgHover + ' transition-all'
+                            },
+                                sidebarOpen ? React.createElement(Icons.X) : React.createElement(Icons.Menu)
+                            ),
+                            React.createElement('div', { className: 'flex items-center gap-2' },
+                                React.createElement(Icons.Bot, { size: 32 }),
+                                React.createElement('span', { className: 'font-bold text-lg hidden sm:block ' + (darkMode ? 'text-white' : 'text-[#1a1a1a]') }, 'OpenRouter AI'),
+                                React.createElement('span', { className: 'hidden sm:block ' + theme.textMuted }, '•'),
+                                React.createElement('span', { className: 'text-xs font-medium ' + theme.textMuted + ' hidden md:block' }, 'AI Assistant')
+                            )
+                        ),
+                        React.createElement('div', { className: 'flex items-center gap-2' },
+                            React.createElement('button', { className: 'p-2 rounded-lg ' + theme.bgHover + ' transition-all' },
+                                React.createElement(Icons.Settings)
+                            )
+                        )
+                    ),
+                    
+                    React.createElement('div', { className: 'flex-1 overflow-y-auto relative' },
+                        React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-8 pb-32' },
+                            showWelcome && messages.length === 1 && React.createElement('div', { 
+                                className: 'flex flex-col items-center justify-center min-h-[70vh] text-center'
+                            },
+                                React.createElement('div', { className: 'mb-6' },
+                                    React.createElement(Icons.Bot, { size: 80 })
+                                ),
+                                React.createElement('h1', { className: 'text-3xl font-bold mb-3 gradient-text' }, 'OpenRouter AI'),
+                                React.createElement('p', { className: 'text-sm ' + theme.textMuted + ' mb-8' }, 'AI ассистент на базе Arcee AI'),
+                                
+                                React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-xl' },
+                                    welcomeSuggestions.map(function(suggestion, i) {
+                                        return React.createElement('button', {
+                                            key: i,
+                                            onClick: function() { setInput(suggestion.text); },
+                                            className: 'flex items-start gap-4 p-4 rounded-2xl text-left ' + theme.bgSidebar + ' border ' + theme.border + ' hover:border-[#007BFF] hover:shadow-lg transition-all duration-200 group'
+                                        },
+                                            React.createElement('span', { className: 'text-2xl' }, suggestion.icon),
+                                            React.createElement('div', null,
+                                                React.createElement('div', { className: 'font-medium ' + theme.text + ' group-hover:text-[#007BFF] transition-colors' }, suggestion.text),
+                                                React.createElement('div', { className: 'text-xs ' + theme.textMuted + ' mt-1' }, suggestion.desc)
+                                            )
+                                        );
+                                    })
+                                )
+                            ),
+                            
+                            messages.map(function(msg) {
+                                // Фильтруем мусор из сообщения для отображения
+                                let displayContent = msg.content;
+                                if (msg.role === 'assistant') {
+                                    displayContent = msg.content.replace(/```python\s*[\s\S]*?```/g, '').trim();
+                                    displayContent = displayContent.replace(/(.+)(\r?\n\1)+/g, '$1');
+                                }
+                                
+                                // Проверяем наличие табличных данных
+                                const hasExcelData = msg.role === 'assistant' && hasTableData(msg.content);
+                                
+                                return React.createElement('div', { 
+                                    key: msg.id, 
+                                    className: 'message-enter flex gap-4 mb-6 ' + (msg.role === 'user' ? 'flex-row-reverse' : '')
+                                },
+                                    React.createElement('div', { 
+                                        className: 'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ' + (msg.role === 'assistant' ? 'bg-gradient-to-br from-[#007BFF] to-[#0056b3] shadow-lg' : theme.userBubble) + ' ' + (msg.role === 'assistant' ? 'glow-blue' : '')
+                                    },
+                                        msg.role === 'assistant' 
+                                            ? React.createElement(Icons.Bot, { size: 24, className: 'text-white' }) 
+                                            : React.createElement(Icons.User)
+                                    ),
+                                    React.createElement('div', { className: 'flex-1 max-w-[85%] ' + (msg.role === 'user' ? 'text-right' : '') },
+                                        React.createElement('div', { 
+                                            className: 'inline-block px-5 py-4 rounded-2xl ' + (msg.role === 'user' ? theme.userBubble + ' text-white shadow-lg' : theme.text) + ' ' + (msg.role === 'user' ? '' : 'bg-transparent')
+                                        },
+                                            React.createElement('div', { className: 'whitespace-pre-wrap text-[15px] leading-relaxed text-left' }, displayContent || msg.content)
+                                        ),
+                                        msg.timestamp && React.createElement('div', { className: 'text-xs mt-2 ' + theme.textMuted }, msg.timestamp),
+                                        hasExcelData && React.createElement('button', {
+                                            onClick: function() { createExcelFromAI(msg.id); },
+                                            className: 'mt-2 px-3 py-1.5 text-xs bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors flex items-center gap-1 cursor-pointer'
+                                        },
+                                            React.createElement(Icons.Download),
+                                            'Скачать Excel'
+                                        )
+                                    )
+                                );
+                            }),
+                            
+                            isLoading && React.createElement('div', { className: 'flex gap-4' },
+                                React.createElement('div', { className: 'flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-[#007BFF] to-[#0056b3] flex items-center justify-center shadow-lg glow-blue' },
+                                    React.createElement(Icons.Bot, { size: 24, className: 'text-white' })
+                                ),
+                                React.createElement('div', { className: 'flex items-center gap-1 px-4 py-3 rounded-2xl ' + theme.inputBg },
+                                    React.createElement('span', { className: 'w-2 h-2 bg-[#007BFF] rounded-full typing-indicator' }),
+                                    React.createElement('span', { className: 'w-2 h-2 bg-[#007BFF] rounded-full typing-indicator', style: { animationDelay: '0.2s' } }),
+                                    React.createElement('span', { className: 'w-2 h-2 bg-[#007BFF] rounded-full typing-indicator', style: { animationDelay: '0.4s' } })
+                                )
+                            ),
+                            
+                            React.createElement('div', { ref: messagesEndRef, className: 'h-8' })
+                        )
+                    ),
+                    
+                    // Input Area
+                    React.createElement('div', { 
+                        className: 'absolute bottom-0 left-0 right-0 px-4 py-4 pb-6 ' + (darkMode ? 'bg-gradient-to-t from-[#0a0e17] via-[#0a0e17]/98 to-transparent' : 'bg-gradient-to-t from-[#f8f9fa] via-[#f8f9fa]/98 to-transparent')
+                    },
+                        React.createElement('div', { className: 'max-w-3xl mx-auto' },
+                            attachments.length > 0 && React.createElement('div', { className: 'flex flex-wrap gap-2 mb-3' },
+                                attachments.map(function(a) {
+                                    return React.createElement('div', { 
+                                        key: a.id, 
+                                        className: 'flex items-center gap-2 px-3 py-2 rounded-lg text-xs ' + (a.type === 'excel' ? (darkMode ? 'bg-green-900/30 border border-green-700/50' : 'bg-green-50 border border-green-200') : (darkMode ? 'bg-[#1a2332] border border-[#2d3748]' : 'bg-[#f1f3f4] border border-[#e8e8e8]'))
+                                    },
+                                        React.createElement('div', { className: 'p-1 rounded ' + (a.type === 'excel' ? 'bg-green-500/10' : 'bg-[#007BFF]/10') },
+                                            a.type === 'excel' 
+                                                ? React.createElement('span', { className: 'text-lg' }, '📊')
+                                                : React.createElement(Icons.FileText)
+                                        ),
+                                        React.createElement('span', { className: theme.text }, a.name),
+                                        a.type === 'excel' && React.createElement('span', { className: 'text-xs text-green-500' }, '✓'),
+                                        a.type === 'excel' && React.createElement('button', {
+                                            onClick: function() { downloadExcelAttachment(a); },
+                                            className: 'p-1 rounded hover:bg-green-500/20 text-green-500 transition-colors',
+                                            title: 'Скачать Excel'
+                                        },
+                                            React.createElement(Icons.Download)
+                                        ),
+                                        React.createElement('button', { 
+                                            onClick: function() { removeAttachment(a.id); }, 
+                                            className: 'p-0.5 rounded hover:bg-red-500/10 hover:text-red-500 transition-colors ' + theme.textMuted
+                                        },
+                                            React.createElement(Icons.XCircle)
+                                        )
+                                    );
+                                })
+                            ),
+                            
+                            React.createElement('div', { 
+                                className: 'relative flex items-end gap-3 px-5 py-4 rounded-2xl ' + theme.inputBg + ' border ' + theme.border + ' focus-within:border-[#007BFF] focus-within:ring-2 focus-within:ring-[#007BFF]/20 transition-all shadow-xl'
+                            },
+                                React.createElement('input', { 
+                                    type: 'file', 
+                                    ref: fileInputRef, 
+                                    onChange: handleFileUpload, 
+                                    accept: '.xlsx,.xls,.csv,.txt,.md,.json', 
+                                    multiple: true, 
+                                    className: 'hidden' 
+                                }),
+                                React.createElement('button', { 
+                                    onClick: function() { fileInputRef.current && fileInputRef.current.click(); }, 
+                                    className: 'p-2 rounded-xl ' + theme.bgHover + ' transition-all hover:text-[#007BFF]'
+                                },
+                                    React.createElement(Icons.Paperclip)
+                                ),
+                                React.createElement('textarea', {
+                                    ref: textareaRef,
+                                    value: input,
+                                    onChange: function(e) { setInput(e.target.value); },
+                                    onKeyPress: handleKeyPress,
+                                    placeholder: 'Отправьте сообщение...',
+                                    className: 'flex-1 bg-transparent outline-none resize-none text-[15px] leading-relaxed ' + (darkMode ? 'text-[#e8eaed] placeholder-[#6b7280]' : 'text-[#1a1a1a] placeholder-[#9aa0a6]') + ' max-h-[200px]',
+                                    rows: 1
+                                }),
+                                React.createElement('button', {
+                                    onClick: handleSend,
+                                    disabled: isLoading || !input.trim(),
+                                    className: 'p-2.5 rounded-xl transition-all duration-200 ' + (input.trim() ? 'bg-gradient-to-r from-[#007BFF] to-[#00D4FF] hover:from-[#0056b3] hover:to-[#007BFF] text-white shadow-lg shadow-[#007BFF]/30' : darkMode ? 'bg-[#1a2332] text-[#6b7280]' : 'bg-[#f1f3f4] text-[#9aa0a6]') + ' disabled:opacity-50 disabled:shadow-none'
+                                },
+                                    React.createElement(Icons.Send)
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        }
+        
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(AIChat));
+    </script>
+</body>
+</html>
