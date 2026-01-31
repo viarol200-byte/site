@@ -8,9 +8,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         ::-webkit-scrollbar { width: 6px; }
@@ -22,6 +26,11 @@
         @keyframes typingBounce { 0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; } 40% { transform: scale(1); opacity: 1; } }
         .glow-blue { box-shadow: 0 0 20px rgba(0, 123, 255, 0.3); }
         .gradient-text { background: linear-gradient(135deg, #007BFF 0%, #00D4FF 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        /* Code block styles */
+        .code-block { animation: codeFadeIn 0.3s ease-out; }
+        @keyframes codeFadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .code-block pre { margin: 0; }
+        .code-block code { font-family: 'Fira Code', 'Consolas', monospace; line-height: 1.6; }
     </style>
 </head>
 <body>
@@ -109,6 +118,17 @@
                     <polyline points="14 2 14 8 20 8"/>
                 </svg>
             ),
+            Copy: () => (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+            ),
+            Check: () => (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+            ),
             XCircle: () => (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10"/>
@@ -149,6 +169,8 @@
             const [attachments, setAttachments] = useState([]);
             const [showWelcome, setShowWelcome] = useState(true);
             const [chatHistory, setChatHistory] = useState([]);
+            const [currentChatId, setCurrentChatId] = useState(null);
+            const [expandedAttachment, setExpandedAttachment] = useState(null);
             
             const messagesEndRef = useRef(null);
             const textareaRef = useRef(null);
@@ -166,21 +188,66 @@
             
             // Сохраняем чат в историю
             function saveChatToHistory(title) {
+                const chatId = currentChatId || Date.now();
+                const chatTitle = title || (messages.length > 1 ? messages[1]?.content?.substring(0, 30) || 'Новый чат' : 'Новый чат');
+                
                 const newChat = {
-                    id: Date.now(),
-                    title: title || input.substring(0, 30) || 'Новый чат',
-                    date: 'Сегодня'
+                    id: chatId,
+                    title: chatTitle,
+                    date: 'Сегодня',
+                    messages: messages.map(m => ({ role: m.role, content: m.content, timestamp: m.timestamp }))
                 };
-                const updated = [newChat, ...chatHistory];
+                
+                // Обновляем или добавляем чат
+                let updated;
+                const existingIndex = chatHistory.findIndex(c => c.id === chatId);
+                if (existingIndex >= 0) {
+                    updated = [...chatHistory];
+                    updated[existingIndex] = newChat;
+                } else {
+                    updated = [newChat, ...chatHistory];
+                }
+                
+                setChatHistory(updated);
+                setCurrentChatId(chatId);
+                localStorage.setItem('chat_history', JSON.stringify(updated));
+            }
+            
+            // Загружаем чат из истории
+            function loadChat(chatId) {
+                const chat = chatHistory.find(c => c.id === chatId);
+                if (chat && chat.messages) {
+                    setMessages(chat.messages.map((m, i) => ({
+                        ...m,
+                        id: Date.now() + i
+                    })));
+                    setShowWelcome(false);
+                    setCurrentChatId(chatId);
+                    setInput('');
+                    setAttachments([]);
+                }
+            }
+            
+            // Удаляем чат из истории
+            function deleteChat(e, chatId) {
+                e.stopPropagation();
+                const updated = chatHistory.filter(c => c.id !== chatId);
                 setChatHistory(updated);
                 localStorage.setItem('chat_history', JSON.stringify(updated));
+                
+                // Если удалили текущий чат, создаём новый
+                if (currentChatId === chatId) {
+                    setCurrentChatId(null);
+                    setMessages(demoMessages);
+                    setShowWelcome(true);
+                }
             }
             
             const demoMessages = [
                 {
                     id: 1,
                     role: 'assistant',
-                    content: 'Привет! Я AI ассистент на базе OpenRouter (модель Arcee AI).\n\nЧем я могу помочь вам сегодня?',
+                    content: 'Привет! Я AI ассистент на базе OpenRouter (модель Arcee AI).\n\nВот пример таблицы которую вы можете скачать в Excel:\n\n| № | Дата | Клиент | Сумма | Статус |\n| --- | --- | --- | --- | --- |\n| 1 | 01.01.2024 | ТОВ "Рога" | 15,000 грн | Виконано |\n| 2 | 05.01.2024 | ПП "Копыта" | 8,500 грн | В роботі |\n| 3 | 10.01.2024 | ФОП "Іванов" | 25,000 грн | Очікує |\n\nНажмите кнопку "Excel" для скачивания!',
                     timestamp: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
                 }
             ];
@@ -250,11 +317,22 @@
                     },
                     body: JSON.stringify({
                         model: 'arcee-ai/trinity-large-preview:free',
-                        messages: messages.filter(m => m.role).concat([{ role: 'user', content: messageContent }]).map(m => ({ role: m.role, content: m.content })),
+                        messages: [
+                            { role: 'system', content: 'Ты полезный ассистент. Когда пользователь загружает файл (Excel, CSV), ТЫ ДОЛЖЕН ПРОАНАЛИЗИРОВАТЬ его содержание и дать полезный ответ. Не повторяй данные, а анализируй их: найди закономерности, сделай выводы, предложи инсайты. Если файл пустой или непонятный - скажи об этом.' },
+                            ...messages.filter(m => m.role).map(m => ({ role: m.role, content: m.content })),
+                            { role: 'user', content: messageContent }
+                        ],
                         stream: true
                     })
                 }).then(function(response) {
                     if (!response.ok) {
+                        if (response.status === 401) {
+                            throw new Error('API ключ недействителен. Проверьте ключ OpenRouter.');
+                        } else if (response.status === 429) {
+                            throw new Error('Превышен лимит запросов. Попробуйте позже.');
+                        } else if (response.status === 400) {
+                            throw new Error('Ошибка запроса. Возможно, модель недоступна.');
+                        }
                         throw new Error('Ошибка API: ' + response.status);
                     }
                     return response.body.getReader();
@@ -315,10 +393,8 @@
                     }]; });
                 }).finally(function() {
                     setIsLoading(false);
-                    // Сохраняем в историю после первого сообщения
-                    if (messages.length === 1) {
-                        saveChatToHistory();
-                    }
+                    // Сохраняем чат после каждого сообщения пользователя
+                    saveChatToHistory();
                 });
             }
             
@@ -387,7 +463,41 @@
             }
             
             function removeAttachment(id) {
-                setAttachments(function(prev) { return prev.filter(function(a) { return a.id !== id; }); });
+                setAttachments(function(prev) { 
+                    const filtered = prev.filter(function(a) { return a.id !== id; });
+                    if (expandedAttachment === id) {
+                        setExpandedAttachment(null);
+                    }
+                    return filtered; 
+                });
+            }
+            
+            // Парсим контент вложения для предпросмотра
+            function parseAttachmentPreview(content) {
+                const lines = content.split('\n');
+                const tableLines = [];
+                let headerRow = null;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    
+                    // Пропускаем пустые строки и заголовки файлов
+                    if (line === '' || line.startsWith('Файл:') || line.startsWith('Лист:')) continue;
+                    
+                    // Если это CSV с запятыми
+                    if (line.includes(',')) {
+                        const cells = line.split(',').map(c => c.trim());
+                        if (cells.length >= 2) {
+                            if (!headerRow) headerRow = cells;
+                            else tableLines.push(cells);
+                        }
+                    }
+                }
+                
+                if (headerRow && tableLines.length > 0) {
+                    return { headers: headerRow, data: tableLines };
+                }
+                return null;
             }
             
             // Скачиваем загруженный Excel файл
@@ -420,32 +530,58 @@
             
             // Проверяем, есть ли табличные данные в сообщении
             function hasTableData(content) {
-                const lines = content.split('\n');
-                let hasHeaderRow = false;
+                // Проверяем markdown таблицу
+                const hasMarkdownTable = /\|.*\|.*\n\|[-:|\s]+\|/.test(content);
+                if (hasMarkdownTable) return true;
                 
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i].trim();
-                    // Ищем строку с |---|---|
-                    if (line.match(/^\|[-:\s]+\|$/)) {
-                        // Проверяем есть ли перед ней строка с контентом
-                        if (i > 0 && lines[i-1].trim().startsWith('|') && lines[i-1].trim().endsWith('|')) {
-                            return true;
-                        }
-                    }
-                }
-                
-                // Python DataFrame
+                // Проверяем Python DataFrame
                 const dfRegex = /df\s*=\s*pd\.DataFrame\(/;
                 if (dfRegex.test(content)) return true;
                 
                 return false;
             }
             
+            // Парсим markdown таблицу в массив данных
+            function parseMarkdownTable(content) {
+                const lines = content.split('\n');
+                const rows = [];
+                let headerRow = null;
+                let foundSeparator = false;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    
+                    if (line.startsWith('|') && line.endsWith('|')) {
+                        // Пропускаем строку-разделитель |---|---
+                        if (line.match(/^\|[-:\s|]+\|$/)) {
+                            foundSeparator = true;
+                            continue;
+                        }
+                        
+                        const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
+                        
+                        if (cells.length >= 2) {
+                            if (!foundSeparator) {
+                                headerRow = cells;
+                            } else {
+                                rows.push(cells);
+                            }
+                        }
+                    }
+                }
+                
+                if (headerRow && rows.length > 0) {
+                    return { headers: headerRow, data: rows };
+                }
+                return null;
+            }
+            
+            // Создаём Excel из данных AI
+            
             // Создаём Excel из данных AI
             function createExcelFromAI(messageId) {
-                // Проверяем загрузку библиотеки
                 if (typeof XLSX === 'undefined') {
-                    alert('Ошибка: библиотека XLSX не загружена. Обновите страницу.');
+                    alert('Ошибка: библиотека XLSX не загружена');
                     return;
                 }
                 
@@ -457,31 +593,51 @@
                 
                 const content = message.content;
                 
-                // Ищем markdown таблицу
+                // Пробуем markdown таблицу
+                const tableRegex = /\|([^\n]+)\|\n\|[-:|\s]+\|([\s\S]*?)(?=\n\n|\n[A-Z]|$)/;
+                const tableMatch = content.match(tableRegex);
+                
+                if (tableMatch) {
+                    console.log('Найдена таблица:', tableMatch[0]);
+                }
+                
+                // Парсим все строки таблицы
                 const tableLines = [];
                 const lines = content.split('\n');
+                let inTable = false;
+                let headerRow = null;
                 
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i].trim();
-                    // Ищем строки с |data| |data| 
+                    
+                    // Пропускаем пустые строки перед таблицей
+                    if (line === '' && !inTable) continue;
+                    
+                    // Если строка начинается и заканчивается на |
                     if (line.startsWith('|') && line.endsWith('|')) {
                         // Пропускаем строку-разделитель |---|---
-                        if (!line.match(/^\|[-:\s]+\|$/)) {
-                            tableLines.push(line);
+                        if (line.match(/^\|[-:\s|]+\|$/)) {
+                            inTable = true;
+                            continue;
                         }
+                        
+                        // Это данные таблицы
+                        const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
+                        if (cells.length >= 2) {
+                            if (!headerRow) headerRow = cells;
+                            else tableLines.push(cells);
+                        }
+                    } else if (inTable && line !== '') {
+                        // Таблица закончилась
+                        break;
                     }
                 }
                 
-                console.log('Найдено строк таблицы:', tableLines.length);
+                console.log('Заголовок:', headerRow);
+                console.log('Строк данных:', tableLines.length);
                 
-                if (tableLines.length >= 2) {
-                    const rows = tableLines.map(line => {
-                        const cells = line.substring(1, line.length - 1).split('|').map(c => c.trim());
-                        return cells;
-                    });
-                    
-                    console.log('Создаём Excel из', rows.length, 'строк');
-                    
+                if (headerRow && tableLines.length > 0) {
+                    const rows = [headerRow, ...tableLines];
                     const ws = XLSX.utils.aoa_to_sheet(rows);
                     const wb = XLSX.utils.book_new();
                     XLSX.utils.book_append_sheet(wb, ws, 'Данные');
@@ -503,8 +659,42 @@
                     return;
                 }
                 
-                alert('Таблица не найдена. Попросите AI создать таблицу в формате:\n| Заголовок |\n| --- |\n| Значение 1 |\n| Значение 2 |');
+                alert('Таблица не найдена. Пример формата:\n| Имя | Возраст |\n| --- | --- |\n| Иван | 25 |');
             }
+            
+            // Парсим код из сообщения
+            function parseCodeBlocks(content) {
+                const codeBlocks = [];
+                const regex = /```(\w*)\s*\n([\s\S]*?)```/g;
+                let match;
+                
+                while ((match = regex.exec(content)) !== null) {
+                    codeBlocks.push({
+                        language: match[1] || 'text',
+                        code: match[2].trim()
+                    });
+                }
+                
+                return codeBlocks;
+            }
+            
+            // Копируем код в буфер обмена
+            function copyCode(code, btnElement) {
+                navigator.clipboard.writeText(code).then(function() {
+                    btnElement.textContent = 'Скопировано!';
+                    setTimeout(function() {
+                        btnElement.textContent = 'Копировать';
+                    }, 2000);
+                }).catch(function() {
+                    btnElement.textContent = 'Ошибка';
+                });
+            }
+            
+            // Удаляем блоки кода из текста для отображения
+            function removeCodeBlocks(content) {
+                return content.replace(/```(\w*)\s*[\s\S]*?```/g, '').trim();
+            }
+            
             
             function handleKeyPress(e) {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -518,19 +708,7 @@
                 setShowWelcome(true);
                 setInput('');
                 setAttachments([]);
-            }
-            
-            function loadChat(chat) {
-                setInput('');
-                setShowWelcome(false);
-                setMessages([
-                    {
-                        id: 1,
-                        role: 'assistant',
-                        content: 'Продолжаем разговор...',
-                        timestamp: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-                    }
-                ]);
+                setCurrentChatId(null);
             }
             
             const welcomeSuggestions = [
@@ -568,15 +746,41 @@
                                 chatHistory.length > 0 ? React.createElement('div', null,
                                     React.createElement('div', { className: 'text-xs font-semibold uppercase tracking-wider mb-3 px-3 ' + theme.textMuted }, 'История'),
                                     chatHistory.map(function(chat) {
-                                        return React.createElement('button', { 
-                                            key: chat.id, 
-                                            onClick: function() { loadChat(chat); },
-                                            className: 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm mb-1 ' + theme.bgHover + ' transition-all duration-150 group'
+                                        const isCurrentChat = currentChatId === chat.id;
+                                        return React.createElement('div', {
+                                            key: chat.id,
+                                            className: 'relative group mb-1'
                                         },
-                                            React.createElement('div', { className: 'p-1.5 rounded-lg bg-gradient-to-br from-[#007BFF]/10 to-[#00D4FF]/10 group-hover:from-[#007BFF]/20 group-hover:to-[#00D4FF]/20 transition-all' },
-                                                React.createElement(Icons.MessageSquare)
+                                            React.createElement('button', { 
+                                                onClick: function() { loadChat(chat.id); },
+                                                className: 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm ' + 
+                                                    (isCurrentChat 
+                                                        ? (darkMode ? 'bg-[#1e3a5f] text-white' : 'bg-[#007BFF] text-white')
+                                                        : (theme.bgHover + ' ' + theme.textSecondary)) + 
+                                                    ' transition-all duration-150'
+                                            },
+                                                React.createElement('div', { 
+                                                    className: 'p-1.5 rounded-lg ' + 
+                                                        (isCurrentChat 
+                                                            ? 'bg-white/20' 
+                                                            : 'bg-gradient-to-br from-[#007BFF]/10 to-[#00D4FF]/10')
+                                                },
+                                                    React.createElement(Icons.MessageSquare)
+                                                ),
+                                                React.createElement('span', { className: 'truncate flex-1' }, chat.title),
+                                                isCurrentChat && React.createElement('div', { className: 'w-2 h-2 rounded-full bg-green-400' })
                                             ),
-                                            React.createElement('span', { className: 'truncate flex-1 ' + theme.textSecondary }, chat.title)
+                                            // Кнопка удаления
+                                            React.createElement('button', {
+                                                onClick: function(e) { deleteChat(e, chat.id); },
+                                                className: 'absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 ' +
+                                                    'hover:bg-red-500/20 hover:text-red-400 transition-all duration-150'
+                                            },
+                                                React.createElement('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+                                                    React.createElement('polyline', { points: '3 6 5 6 21 6' }),
+                                                    React.createElement('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' })
+                                                )
+                                            )
                                         );
                                     })
                                 ) : React.createElement('div', { className: 'text-center py-8 ' + theme.textMuted },
@@ -673,15 +877,14 @@
                             ),
                             
                             messages.map(function(msg) {
-                                // Фильтруем мусор из сообщения для отображения
-                                let displayContent = msg.content;
-                                if (msg.role === 'assistant') {
-                                    displayContent = msg.content.replace(/```python\s*[\s\S]*?```/g, '').trim();
-                                    displayContent = displayContent.replace(/(.+)(\r?\n\1)+/g, '$1');
-                                }
+                                // Удаляем блоки кода из основного текста
+                                const displayContent = msg.role === 'assistant' ? removeCodeBlocks(msg.content) : msg.content;
                                 
-                                // Проверяем наличие табличных данных
-                                const hasExcelData = msg.role === 'assistant' && hasTableData(msg.content);
+                                // Парсим блоки кода
+                                const codeBlocks = msg.role === 'assistant' ? parseCodeBlocks(msg.content) : [];
+                                
+                                // Парсим таблицу
+                                const tableData = msg.role === 'assistant' ? parseMarkdownTable(msg.content) : null;
                                 
                                 return React.createElement('div', { 
                                     key: msg.id, 
@@ -695,19 +898,108 @@
                                             : React.createElement(Icons.User)
                                     ),
                                     React.createElement('div', { className: 'flex-1 max-w-[85%] ' + (msg.role === 'user' ? 'text-right' : '') },
+                                        // Текст сообщения
                                         React.createElement('div', { 
                                             className: 'inline-block px-5 py-4 rounded-2xl ' + (msg.role === 'user' ? theme.userBubble + ' text-white shadow-lg' : theme.text) + ' ' + (msg.role === 'user' ? '' : 'bg-transparent')
                                         },
-                                            React.createElement('div', { className: 'whitespace-pre-wrap text-[15px] leading-relaxed text-left' }, displayContent || msg.content)
+                                            React.createElement('div', { className: 'whitespace-pre-wrap text-[15px] leading-relaxed text-left' }, displayContent)
                                         ),
-                                        msg.timestamp && React.createElement('div', { className: 'text-xs mt-2 ' + theme.textMuted }, msg.timestamp),
-                                        hasExcelData && React.createElement('button', {
-                                            onClick: function() { createExcelFromAI(msg.id); },
-                                            className: 'mt-2 px-3 py-1.5 text-xs bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors flex items-center gap-1 cursor-pointer'
+                                        // Предпросмотр таблицы (мини-Excel)
+                                        tableData && React.createElement('div', {
+                                            className: 'mt-3 rounded-xl overflow-hidden border border-[#2a2a3a]'
                                         },
-                                            React.createElement(Icons.Download),
-                                            'Скачать Excel'
-                                        )
+                                            // Заголовок таблицы
+                                            React.createElement('div', {
+                                                className: 'flex items-center justify-between px-4 py-2 bg-[#1a1a24] border-b border-[#2a2a3a]'
+                                            },
+                                                React.createElement('span', { className: 'text-xs text-[#8b949e]' }, '📊 Таблица'),
+                                                React.createElement('button', {
+                                                    onClick: function() { createExcelFromAI(msg.id); },
+                                                    className: 'flex items-center gap-1.5 px-2 py-1 text-xs text-[#8b949e] hover:text-white hover:bg-[#2a2a3a] rounded transition-colors'
+                                                },
+                                                    React.createElement(Icons.Download),
+                                                    'Excel'
+                                                )
+                                            ),
+                                            // Сама таблица
+                                            React.createElement('div', {
+                                                className: 'overflow-x-auto bg-[#0a0a0f]',
+                                                style: { maxHeight: '300px', overflowY: 'auto' }
+                                            },
+                                                React.createElement('table', {
+                                                    className: 'w-full text-sm',
+                                                    style: { borderCollapse: 'collapse' }
+                                                },
+                                                    // Заголовок
+                                                    React.createElement('thead', null,
+                                                        React.createElement('tr', {
+                                                            style: { backgroundColor: '#1a1a24' }
+                                                        },
+                                                            tableData.headers.map(function(h, i) {
+                                                                return React.createElement('th', {
+                                                                    key: i,
+                                                                    className: 'px-3 py-2 text-left text-xs font-medium text-[#8b949e] border-b border-[#2a2a3a]',
+                                                                    style: { whiteSpace: 'nowrap' }
+                                                                }, h);
+                                                            })
+                                                        )
+                                                    ),
+                                                    // Данные
+                                                    React.createElement('tbody', null,
+                                                        tableData.data.map(function(row, ri) {
+                                                            return React.createElement('tr', {
+                                                                key: ri,
+                                                                style: { backgroundColor: ri % 2 === 0 ? '#0a0a0f' : '#111118' }
+                                                            },
+                                                                row.map(function(cell, ci) {
+                                                                    return React.createElement('td', {
+                                                                        key: ci,
+                                                                        className: 'px-3 py-2 text-xs text-[#e6edf3] border-b border-[#2a2a3a]',
+                                                                        style: { whiteSpace: 'nowrap' }
+                                                                    }, cell);
+                                                                })
+                                                            );
+                                                        })
+                                                    )
+                                                )
+                                            )
+                                        ),
+                                        // Блоки кода
+                                        codeBlocks.map(function(block, idx) {
+                                            // Подсвечиваем код с помощью Prism
+                                            const highlighted = Prism.highlight(block.code, Prism.languages[block.language] || Prism.languages.text, block.language);
+                                            
+                                            return React.createElement('div', {
+                                                key: 'code-' + idx,
+                                                className: 'mt-3 rounded-xl overflow-hidden border border-[#2a2a3a] code-block'
+                                            },
+                                                // Заголовок блока кода
+                                                React.createElement('div', {
+                                                    className: 'flex items-center justify-between px-4 py-2 bg-[#1a1a24] border-b border-[#2a2a3a]'
+                                                },
+                                                    React.createElement('span', { className: 'text-xs text-[#8b949e]' }, block.language),
+                                                    React.createElement('button', {
+                                                        className: 'flex items-center gap-1.5 px-2 py-1 text-xs text-[#8b949e] hover:text-white hover:bg-[#2a2a3a] rounded transition-colors',
+                                                        onClick: function(e) { copyCode(block.code, e.target); }
+                                                    },
+                                                        React.createElement(Icons.Copy),
+                                                        'Копировать'
+                                                    )
+                                                ),
+                                                // Код с подсветкой
+                                                React.createElement('pre', {
+                                                    className: 'p-4 bg-[#1e1e1e] overflow-x-auto',
+                                                    style: { margin: 0 }
+                                                },
+                                                    React.createElement('code', {
+                                                        className: 'text-sm',
+                                                        style: { fontFamily: 'Fira Code, Consolas, monospace' },
+                                                        dangerouslySetInnerHTML: { __html: highlighted }
+                                                    })
+                                                )
+                                            );
+                                        }),
+                                        msg.timestamp && React.createElement('div', { className: 'text-xs mt-2 ' + theme.textMuted }, msg.timestamp)
                                     )
                                 );
                             }),
@@ -732,31 +1024,82 @@
                         className: 'absolute bottom-0 left-0 right-0 px-4 py-4 pb-6 ' + (darkMode ? 'bg-gradient-to-t from-[#0a0e17] via-[#0a0e17]/98 to-transparent' : 'bg-gradient-to-t from-[#f8f9fa] via-[#f8f9fa]/98 to-transparent')
                     },
                         React.createElement('div', { className: 'max-w-3xl mx-auto' },
-                            attachments.length > 0 && React.createElement('div', { className: 'flex flex-wrap gap-2 mb-3' },
+                            attachments.length > 0 && React.createElement('div', { className: 'mb-2' },
+                                // Список вложений
                                 attachments.map(function(a) {
-                                    return React.createElement('div', { 
-                                        key: a.id, 
-                                        className: 'flex items-center gap-2 px-3 py-2 rounded-lg text-xs ' + (a.type === 'excel' ? (darkMode ? 'bg-green-900/30 border border-green-700/50' : 'bg-green-50 border border-green-200') : (darkMode ? 'bg-[#1a2332] border border-[#2d3748]' : 'bg-[#f1f3f4] border border-[#e8e8e8]'))
-                                    },
-                                        React.createElement('div', { className: 'p-1 rounded ' + (a.type === 'excel' ? 'bg-green-500/10' : 'bg-[#007BFF]/10') },
-                                            a.type === 'excel' 
-                                                ? React.createElement('span', { className: 'text-lg' }, '📊')
-                                                : React.createElement(Icons.FileText)
-                                        ),
-                                        React.createElement('span', { className: theme.text }, a.name),
-                                        a.type === 'excel' && React.createElement('span', { className: 'text-xs text-green-500' }, '✓'),
-                                        a.type === 'excel' && React.createElement('button', {
-                                            onClick: function() { downloadExcelAttachment(a); },
-                                            className: 'p-1 rounded hover:bg-green-500/20 text-green-500 transition-colors',
-                                            title: 'Скачать Excel'
+                                    const isExpanded = expandedAttachment === a.id;
+                                    const preview = a.content ? parseAttachmentPreview(a.content) : null;
+                                    
+                                    return React.createElement('div', { key: a.id },
+                                        // Кнопка вложения
+                                        React.createElement('div', { 
+                                            className: 'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs cursor-pointer ' +
+                                                (isExpanded 
+                                                    ? (darkMode ? 'bg-[#007BFF]/20 border border-[#007BFF]' : 'bg-blue-50 border border-blue-300')
+                                                    : (darkMode ? 'bg-[#1a2332] border border-[#2d3748]' : 'bg-gray-100 border border-gray-200')) +
+                                                ' transition-all',
+                                            onClick: function() { setExpandedAttachment(isExpanded ? null : a.id); }
                                         },
-                                            React.createElement(Icons.Download)
+                                            React.createElement('span', { className: 'text-xs' }, a.type === 'excel' ? '📊' : '📄'),
+                                            React.createElement('span', { 
+                                                className: 'truncate max-w-[100px] ' + theme.text 
+                                            }, a.name),
+                                            React.createElement('span', { 
+                                                className: 'text-xs ' + theme.textMuted 
+                                            }, isExpanded ? '▼' : '▶'),
+                                            React.createElement('button', { 
+                                                onClick: function(e) { e.stopPropagation(); removeAttachment(a.id); }, 
+                                                className: 'ml-auto p-0.5 rounded hover:bg-red-500/10 hover:text-red-500 transition-colors ' + theme.textMuted
+                                            },
+                                                React.createElement('span', { className: 'text-xs' }, '×')
+                                            )
                                         ),
-                                        React.createElement('button', { 
-                                            onClick: function() { removeAttachment(a.id); }, 
-                                            className: 'p-0.5 rounded hover:bg-red-500/10 hover:text-red-500 transition-colors ' + theme.textMuted
+                                        // Предпросмотр таблицы
+                                        isExpanded && preview && React.createElement('div', {
+                                            className: 'mt-1 ml-4 rounded-lg overflow-hidden border border-[#2d3748]'
                                         },
-                                            React.createElement(Icons.XCircle)
+                                            React.createElement('div', {
+                                                className: 'px-3 py-1.5 bg-[#1a2332] border-b border-[#2d3748] flex items-center justify-between'
+                                            },
+                                                React.createElement('span', { className: 'text-xs text-[#8b949e]' }, '📊 ' + a.name)
+                                            ),
+                                            React.createElement('div', {
+                                                className: 'overflow-x-auto bg-[#0a0a0f]',
+                                                style: { maxHeight: '150px' }
+                                            },
+                                                React.createElement('table', { className: 'w-full text-xs' },
+                                                    React.createElement('thead', null,
+                                                        React.createElement('tr', { style: { backgroundColor: '#1a1a24' } },
+                                                            preview.headers.map(function(h, i) {
+                                                                return React.createElement('th', {
+                                                                    key: i,
+                                                                    className: 'px-2 py-1 text-left text-xs font-medium text-[#8b949e] border-b border-[#2d3748]',
+                                                                    style: { whiteSpace: 'nowrap' }
+                                                                }, h);
+                                                            })
+                                                        )
+                                                    ),
+                                                    React.createElement('tbody', null,
+                                                        preview.data.slice(0, 5).map(function(row, ri) {
+                                                            return React.createElement('tr', {
+                                                                key: ri,
+                                                                style: { backgroundColor: ri % 2 === 0 ? '#0a0a0f' : '#111118' }
+                                                            },
+                                                                row.map(function(cell, ci) {
+                                                                    return React.createElement('td', {
+                                                                        key: ci,
+                                                                        className: 'px-2 py-1 text-xs text-[#e6edf3] border-b border-[#2d3748]',
+                                                                        style: { whiteSpace: 'nowrap' }
+                                                                    }, cell);
+                                                                })
+                                                            );
+                                                        })
+                                                    )
+                                                )
+                                            ),
+                                            preview.data.length > 5 && React.createElement('div', {
+                                                className: 'px-3 py-1 text-xs text-center ' + theme.textMuted
+                                            }, '... ещё ' + (preview.data.length - 5) + ' строк')
                                         )
                                     );
                                 })
